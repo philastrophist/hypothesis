@@ -143,6 +143,7 @@ from hypothesis.vendor.pretty import RepresentationPrinter
 from hypothesis.version import __version__
 
 TestFunc = TypeVar("TestFunc", bound=Callable)
+MakesStrategy = Callable[..., SearchStrategy[Ex]]
 
 
 running_under_pytest = False
@@ -717,6 +718,24 @@ class Stuff:
     given_kwargs: dict
 
 
+def take_strategy_from_parameters(k: str, s: str | SearchStrategy[Ex], kwargs: dict[str, Any]) -> SearchStrategy[Ex]:
+    if isinstance(s, str):
+        s = kwargs.pop(s)
+        if not isinstance(s, SearchStrategy) and not callable(s):
+            raise ValueError(f"Expected a strategy for parameterized argument {k} found `{s!r}`")
+    return s
+
+
+def call_strategy_builder(name: str, maybe_func: Any, **kws: Any) -> SearchStrategy[Ex]:
+    if isinstance(maybe_func, SearchStrategy):
+        return maybe_func
+    strategy = maybe_func(**{k: v for k, v in kws.items() if k in inspect.signature(maybe_func).parameters})
+    if not isinstance(strategy, SearchStrategy):
+        raise ValueError(f"Expected builder function {name} to return a strategy but it returned `{strategy!r}`")
+    return strategy
+
+
+
 def process_arguments_to_given(
     wrapped_test: Any,
     arguments: Sequence[object],
@@ -726,6 +745,8 @@ def process_arguments_to_given(
 ) -> tuple[Sequence[object], dict[str, object], Stuff]:
     selfy = None
     arguments, kwargs = convert_positional_arguments(wrapped_test, arguments, kwargs)
+    given_kwargs = {k: take_strategy_from_parameters(k, v, kwargs) for k, v in given_kwargs.items()}
+    given_kwargs = {k: call_strategy_builder(k, v, **given_kwargs, **kwargs) for k, v in given_kwargs.items()}
 
     # If the test function is a method of some kind, the bound object
     # will be the first named argument if there are any, otherwise the
@@ -1634,7 +1655,7 @@ def given(
 
 @overload
 def given(
-    *_given_arguments: SearchStrategy[Any],
+    *_given_arguments: Union[SearchStrategy[Any], str, MakesStrategy],
 ) -> Callable[
     [Callable[..., Optional[Coroutine[Any, Any, None]]]], Callable[..., None]
 ]:  # pragma: no cover
@@ -1643,7 +1664,7 @@ def given(
 
 @overload
 def given(
-    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType],
+    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType, str, MakesStrategy],
 ) -> Callable[
     [Callable[..., Optional[Coroutine[Any, Any, None]]]], Callable[..., None]
 ]:  # pragma: no cover
@@ -1651,8 +1672,8 @@ def given(
 
 
 def given(
-    *_given_arguments: Union[SearchStrategy[Any], EllipsisType],
-    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType],
+    *_given_arguments: Union[SearchStrategy[Any], EllipsisType, str, MakesStrategy],
+    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType, str, MakesStrategy],
 ) -> Callable[
     [Callable[..., Optional[Coroutine[Any, Any, None]]]], Callable[..., None]
 ]:
@@ -1798,8 +1819,7 @@ def given(
             given_kwargs = dict(list(zip(posargs[::-1], given_arguments[::-1]))[::-1])
         # These have been converted, so delete them to prevent accidental use.
         del given_arguments
-
-        new_signature = new_given_signature(original_sig, given_kwargs)
+        new_signature = new_given_signature(original_sig, {k: v for k, v in given_kwargs.items() if not isinstance(v, str)})
 
         # Use type information to convert "infer" arguments into appropriate strategies.
         if ... in given_kwargs.values():
