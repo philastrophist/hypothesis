@@ -144,7 +144,6 @@ from hypothesis.vendor.pretty import RepresentationPrinter
 from hypothesis.version import __version__
 
 TestFunc = TypeVar("TestFunc", bound=Callable)
-MakesStrategy = Callable[..., SearchStrategy[Ex]]
 
 
 running_under_pytest = False
@@ -1638,7 +1637,7 @@ def given(
 
 @overload
 def given(
-    *_given_arguments: Union[SearchStrategy[Any], str, MakesStrategy],
+    *_given_arguments: Union[SearchStrategy[Any], str],
 ) -> Callable[
     [Callable[..., Optional[Coroutine[Any, Any, None]]]], Callable[..., None]
 ]:  # pragma: no cover
@@ -1647,7 +1646,7 @@ def given(
 
 @overload
 def given(
-    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType, str, MakesStrategy],
+    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType, str],
 ) -> Callable[
     [Callable[..., Optional[Coroutine[Any, Any, None]]]], Callable[..., None]
 ]:  # pragma: no cover
@@ -1655,8 +1654,8 @@ def given(
 
 
 def given(
-    *_given_arguments: Union[SearchStrategy[Any], EllipsisType, str, MakesStrategy],
-    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType, str, MakesStrategy],
+    *_given_arguments: Union[SearchStrategy[Any], EllipsisType, str],
+    **_given_kwargs: Union[SearchStrategy[Any], EllipsisType, str],
 ) -> Callable[
     [Callable[..., Optional[Coroutine[Any, Any, None]]]], Callable[..., None]
 ]:
