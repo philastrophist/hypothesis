@@ -133,6 +133,7 @@ from hypothesis.reporting import (
     with_reporter,
 )
 from hypothesis.statistics import describe_statistics, describe_targets, note_statistics
+from hypothesis.strategies._internal.params import ParamStrategyRegistry, param, ParamStrategy
 from hypothesis.strategies._internal.misc import NOTHING
 from hypothesis.strategies._internal.strategies import (
     Ex,
@@ -718,24 +719,6 @@ class Stuff:
     given_kwargs: dict
 
 
-def take_strategy_from_parameters(k: str, s: str | SearchStrategy[Ex], kwargs: dict[str, Any]) -> SearchStrategy[Ex]:
-    if isinstance(s, str):
-        s = kwargs.pop(s)
-        if not isinstance(s, SearchStrategy) and not callable(s):
-            raise ValueError(f"Expected a strategy for parameterized argument {k} found `{s!r}`")
-    return s
-
-
-def call_strategy_builder(name: str, maybe_func: Any, **kws: Any) -> SearchStrategy[Ex]:
-    if isinstance(maybe_func, SearchStrategy):
-        return maybe_func
-    strategy = maybe_func(**{k: v for k, v in kws.items() if k in inspect.signature(maybe_func).parameters})
-    if not isinstance(strategy, SearchStrategy):
-        raise ValueError(f"Expected builder function {name} to return a strategy but it returned `{strategy!r}`")
-    return strategy
-
-
-
 def process_arguments_to_given(
     wrapped_test: Any,
     arguments: Sequence[object],
@@ -745,8 +728,6 @@ def process_arguments_to_given(
 ) -> tuple[Sequence[object], dict[str, object], Stuff]:
     selfy = None
     arguments, kwargs = convert_positional_arguments(wrapped_test, arguments, kwargs)
-    given_kwargs = {k: take_strategy_from_parameters(k, v, kwargs) for k, v in given_kwargs.items()}
-    given_kwargs = {k: call_strategy_builder(k, v, **given_kwargs, **kwargs) for k, v in given_kwargs.items()}
 
     # If the test function is a method of some kind, the bound object
     # will be the first named argument if there are any, otherwise the
@@ -764,10 +745,11 @@ def process_arguments_to_given(
 
     arguments = tuple(arguments)
 
-    with ensure_free_stackframes():
-        for k, s in given_kwargs.items():
-            check_strategy(s, name=k)
-            s.validate()
+    with ParamStrategyRegistry(kwargs, given_kwargs):
+        with ensure_free_stackframes():
+            for k, s in given_kwargs.items():
+                check_strategy(s, name=k)
+                s.validate()
 
     stuff = Stuff(selfy=selfy, args=arguments, kwargs=kwargs, given_kwargs=given_kwargs)
 
@@ -823,6 +805,7 @@ def new_given_signature(original_sig, given_kwargs):
             if not (
                 p.name in given_kwargs
                 and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+                and not isinstance(given_kwargs.get(p.name, None), ParamStrategy)
             )
         ],
         return_annotation=None,
@@ -1819,7 +1802,9 @@ def given(
             given_kwargs = dict(list(zip(posargs[::-1], given_arguments[::-1]))[::-1])
         # These have been converted, so delete them to prevent accidental use.
         del given_arguments
-        new_signature = new_given_signature(original_sig, {k: v for k, v in given_kwargs.items() if not isinstance(v, str)})
+        # convert strings to ParamStrategy instances.
+        given_kwargs = {k: param(v) if isinstance(v, str) else v for k, v in given_kwargs.items()}
+        new_signature = new_given_signature(original_sig, given_kwargs)
 
         # Use type information to convert "infer" arguments into appropriate strategies.
         if ... in given_kwargs.values():
