@@ -1,18 +1,21 @@
 from typing import Optional, Any
 
+from hypothesis.internal.conjecture.data import ConjectureData
 from hypothesis.strategies import SearchStrategy, just
 from hypothesis.strategies._internal.deferred import DeferredStrategy
+from hypothesis.strategies._internal.strategies import Ex
 from hypothesis.strategies._internal.utils import cacheable, defines_strategy
 
 
 class ParamStrategyRegistry:
     _current_registry: Optional['ParamStrategyRegistry'] = None
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> 'ParamStrategyRegistry':
         if not self.__class__._current_registry:
             self.__class__._current_registry = self
         else:
             raise RuntimeError("Cannot enter ParamStrategyRegistry more than once")
+        return self
 
     def __exit__(self, *args, **kwargs) -> None:
         self.__class__._current_registry = None
@@ -47,11 +50,15 @@ class ParamStrategyRegistry:
 class ParamStrategy(DeferredStrategy):
     def __init__(self, name: str):
         self._name = name
-        super().__init__(lambda: ParamStrategyRegistry.get(self._name))
+        super().__init__(lambda: ParamStrategyRegistry.get(self._name), cache=False)
+
+    def __repr__(self) -> str:
+        try:
+            return f"{self.__class__.__name__}({repr(self.wrapped_strategy)})"
+        except RuntimeError:
+            return f"{self.__class__.__name__}(deferred@{self._name})"
 
 
-
-@cacheable
 @defines_strategy(never_lazy=True)
 def param(name: str) -> SearchStrategy[Any]:
     """Return a reference to a strategy by the name it will have as input into the test case.

@@ -27,8 +27,9 @@ from hypothesis.strategies._internal.strategies import (
 class DeferredStrategy(SearchStrategy[Ex]):
     """A strategy which may be used before it is fully defined."""
 
-    def __init__(self, definition: Callable[[], SearchStrategy[Ex]]):
+    def __init__(self, definition: Callable[[], SearchStrategy[Ex]], cache: bool = True):
         super().__init__()
+        self.__cache = cache
         self.__wrapped_strategy: Optional[SearchStrategy[Ex]] = None
         self.__in_repr: bool = False
         self.__definition: Optional[Callable[[], SearchStrategy[Ex]]] = definition
@@ -47,6 +48,8 @@ class DeferredStrategy(SearchStrategy[Ex]):
             if result is self:
                 raise InvalidArgument("Cannot define a deferred strategy to be itself")
             check_strategy(result, "definition()")
+            if not self.__cache:
+                return result
             self.__wrapped_strategy = result
             self.__definition = None
         return self.__wrapped_strategy
