@@ -350,7 +350,7 @@ class SearchStrategy(Generic[Ex]):
             ex: Ex,  # type: ignore # mypy is overzealous in preventing covariant params
         ) -> None:
             self.__examples.append(ex)
-
+        self.validate()
         example_generating_inner_function()
         shuffle(self.__examples)
         return self.__examples.pop()
