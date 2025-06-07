@@ -56,7 +56,6 @@ from hypothesis.strategies._internal.datetime import (
 from hypothesis.strategies._internal.ipaddress import ip_addresses
 from hypothesis.strategies._internal.misc import just, none, nothing
 from hypothesis.strategies._internal.numbers import floats, integers
-from hypothesis.strategies._internal.params import param
 from hypothesis.strategies._internal.strategies import one_of
 from hypothesis.strategies._internal.utils import _strategies
 
@@ -97,7 +96,6 @@ __all__ = [
     "none",
     "nothing",
     "one_of",
-    "param",
     "permutations",
     "random_module",
     "randoms",

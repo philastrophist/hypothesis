@@ -133,7 +133,11 @@ from hypothesis.reporting import (
     with_reporter,
 )
 from hypothesis.statistics import describe_statistics, describe_targets, note_statistics
-from hypothesis.strategies._internal.params import ParamStrategyRegistry, param, ParamStrategy
+from hypothesis.params import (
+    param,
+    ExpectingParameters,
+    resolve_parameters, HypothesisParameter,
+)
 from hypothesis.strategies._internal.misc import NOTHING
 from hypothesis.strategies._internal.strategies import (
     Ex,
@@ -716,7 +720,6 @@ class Stuff:
     args: tuple
     kwargs: dict
     given_kwargs: dict
-    registry: ParamStrategyRegistry
 
 
 def process_arguments_to_given(
@@ -744,20 +747,16 @@ def process_arguments_to_given(
         selfy = None
 
     arguments = tuple(arguments)
+    parameter_inputs = {k: v for kws in [given_kwargs, kwargs] for k, v in kws.items() if not isinstance(v, HypothesisParameter)}
+    resolved_arguments, resolved_kwargs, resolved_given_kwargs = resolve_parameters(parameter_inputs, arguments, kwargs, given_kwargs)
 
-    with ParamStrategyRegistry(kwargs, given_kwargs) as registry:
-        with ensure_free_stackframes():
-            for k, s in given_kwargs.items():
-                check_strategy(s, name=k)
-                s.validate()
-    # here we need to concretize all the params no matter where they are in the tree (done)
-    # we also need to reset each depending strategy to avoid carryover (cant do since they are cached in many places)
-    # so, ParamStrategy needs to infect all strategies that use it and turn them into uncached deferred strategies.
-    # Or we allow all caching but conditional on registry reset
-    # so, caching is allowed but only if the registry is not reset.
-    # Lazy and Deferred both have wrapped_strategy so that needs editing too.
+    with ensure_free_stackframes():
+        for k, s in resolved_given_kwargs.items():
+            check_strategy(s, name=k)
+            s.validate()
 
-    stuff = Stuff(selfy=selfy, args=arguments, kwargs=kwargs, given_kwargs=given_kwargs, registry=registry)
+
+    stuff = Stuff(selfy=selfy, args=resolved_arguments, kwargs=resolved_kwargs, given_kwargs=resolved_given_kwargs)
     return arguments, kwargs, stuff
 
 
@@ -810,7 +809,7 @@ def new_given_signature(original_sig, given_kwargs):
             if not (
                 p.name in given_kwargs
                 and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
-                and not isinstance(given_kwargs.get(p.name, None), ParamStrategy)
+                and not isinstance(given_kwargs.get(p.name, None), ExpectingParameters)
             )
         ],
         return_annotation=None,
@@ -1030,9 +1029,8 @@ class StateForActualGivenExecution:
             args = self.stuff.args
             kwargs = dict(self.stuff.kwargs)
             if example_kwargs is None:
-                with self.stuff.registry:
-                    kw, argslices = context.prep_args_kwargs_from_strategies(
-                        self.stuff.given_kwargs
+                kw, argslices = context.prep_args_kwargs_from_strategies(
+                    self.stuff.given_kwargs
                 )
             else:
                 kw = example_kwargs

@@ -20,6 +20,7 @@ import attr
 from hypothesis.internal.cache import LRUReusedCache
 from hypothesis.internal.floats import clamp, float_to_int
 from hypothesis.internal.reflection import proxies
+from hypothesis.params import parametrizable
 from hypothesis.vendor.pretty import pretty
 
 if TYPE_CHECKING:
@@ -120,6 +121,7 @@ def defines_strategy(
     def decorator(strategy_definition):
         """A decorator that registers the function as a strategy and makes it
         lazily evaluated."""
+        strategy_definition = parametrizable(strategy_definition)
         _strategies[strategy_definition.__name__] = signature(strategy_definition)
 
         if never_lazy:
